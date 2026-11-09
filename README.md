@@ -2,6 +2,10 @@
 
 Records a meeting's microphone and system audio as two separate FLAC tracks, then transcribes both with faster-whisper into one timestamped, speaker-labeled transcript.
 
+## Why
+
+With agents becoming more and more part of our development pipeline, I needed a simple way of keeping track of what has been discussed in meetings. I don't want to rely on third-party services for privacy and data-security reasons — hence this local-only setup. Audio never leaves the machine; recording, transcription, and storage all happen locally.
+
 ## What it does
 
 - Records your mic from the `default` PulseAudio/PipeWire source.
