@@ -1,0 +1,10 @@
+[Desktop Entry]
+Type=Application
+Name=Meeting Recorder
+Comment=Record mic + system audio and transcribe the meeting
+Exec=/home/matthias-conteo/.local/bin/meeting-recorder
+Icon=media-record
+Terminal=true
+Categories=AudioVideo;Audio;
+Keywords=meeting;record;transcribe;audio;
+StartupNotify=true

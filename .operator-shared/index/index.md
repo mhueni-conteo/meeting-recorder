@@ -20,5 +20,6 @@ read_if: Working anywhere in this repository
 ### Repository root
 
 - `meeting-recorder` - The recorder/transcriber script; the only source file and entry point.
-- `README.md` - User-facing overview, requirements, install, and usage.
+- `meeting-recorder.desktop` - Optional GNOME dash launcher; install by symlinking into `~/.local/share/applications/`.
+- `README.md` - User-facing overview, requirements, install, usage, and desktop integration.
 - `.gitignore` - Ignores the private Operator partition and Python/editor artifacts.
