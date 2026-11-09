@@ -49,7 +49,3 @@ Per session, in `~/Documents/Transcripts/`:
 ## Configuration
 
 Hardcoded near the top of the script: `SAVE_DIR`, `WHISPER_MODEL`, `MIC_LABEL`, `SPEAKER_LABEL`.
-
-## Known discrepancy
-
-The stop message prints `int8`, but the model runs `compute_type="float32"`.

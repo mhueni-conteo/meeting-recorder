@@ -61,7 +61,7 @@ cleanup_and_transcribe() {
         echo "Audio saved to:"
         echo "  You:    $FINAL_MIC"
         echo "  Others: $FINAL_SPK"
-        echo "Running faster-whisper transcription (model: $WHISPER_MODEL, int8)..."
+        echo "Running faster-whisper transcription (model: $WHISPER_MODEL, float32)..."
 
         # Transcribe both channels and merge into one timestamped, speaker-labeled file.
         python3 - "$FINAL_MIC" "$FINAL_SPK" "$WHISPER_MODEL" "$MIC_LABEL" "$SPEAKER_LABEL" "$FINAL_TXT" <<'PYEOF'
