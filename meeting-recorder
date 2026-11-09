@@ -31,6 +31,14 @@ if [ -z "$SESSION_NAME" ]; then
     SESSION_NAME="meeting"
 fi
 
+# Meeting type: online captures mic + system audio; in-person captures mic only.
+read -rp "Meeting type [1=online, 2=in-person] (default: 1): " MODE
+if [ "$MODE" = "2" ]; then
+    MODE="in-person"
+else
+    MODE="online"
+fi
+
 # Sanitize session name (replace spaces/special chars with underscores)
 SAFE_NAME=$(echo "$SESSION_NAME" | tr ' ' '_' | tr -cd '[:alnum:]_-')
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
@@ -43,7 +51,11 @@ FINAL_TXT="${SAVE_DIR}/${BASE_FILENAME}.txt"
 echo ""
 echo "=========================================================="
 echo " Recording started!"
-echo " Sources: Mic (you) + System audio (callers), saved separately"
+if [ "$MODE" = "in-person" ]; then
+    echo " Source: Mic only"
+else
+    echo " Sources: Mic (you) + System audio (callers), saved separately"
+fi
 echo " Press [Ctrl+C] when the meeting ends to stop and transcribe."
 echo "=========================================================="
 echo ""
@@ -55,22 +67,39 @@ cleanup_and_transcribe() {
     echo " Recording stopped. Processing audio..."
     echo "=========================================================="
 
-    if [ -f "$TEMP_MIC" ] && [ -f "$TEMP_SPK" ]; then
-        mv "$TEMP_MIC" "$FINAL_MIC"
-        mv "$TEMP_SPK" "$FINAL_SPK"
-        echo "Audio saved to:"
-        echo "  You:    $FINAL_MIC"
-        echo "  Others: $FINAL_SPK"
-        echo "Running faster-whisper transcription (model: $WHISPER_MODEL, float32)..."
+    if [ "$MODE" = "in-person" ]; then
+        if [ -f "$TEMP_MIC" ]; then
+            mv "$TEMP_MIC" "$FINAL_MIC"
+            echo "Audio saved to: $FINAL_MIC"
+        else
+            echo "No recording was captured."
+            gio open "$SAVE_DIR" >/dev/null 2>&1 || true
+            exit 0
+        fi
+    else
+        if [ -f "$TEMP_MIC" ] && [ -f "$TEMP_SPK" ]; then
+            mv "$TEMP_MIC" "$FINAL_MIC"
+            mv "$TEMP_SPK" "$FINAL_SPK"
+            echo "Audio saved to:"
+            echo "  You:    $FINAL_MIC"
+            echo "  Others: $FINAL_SPK"
+        else
+            echo "No recording was captured."
+            gio open "$SAVE_DIR" >/dev/null 2>&1 || true
+            exit 0
+        fi
+    fi
 
-        # Transcribe both channels and merge into one timestamped, speaker-labeled file.
-        python3 - "$FINAL_MIC" "$FINAL_SPK" "$WHISPER_MODEL" "$MIC_LABEL" "$SPEAKER_LABEL" "$FINAL_TXT" <<'PYEOF'
+    echo "Running faster-whisper transcription (model: $WHISPER_MODEL, int8)..."
+
+    # Transcribe the recorded channel(s) and merge into one timestamped, speaker-labeled file.
+    python3 - "$MODE" "$FINAL_MIC" "$FINAL_SPK" "$WHISPER_MODEL" "$MIC_LABEL" "$SPEAKER_LABEL" "$FINAL_TXT" <<'PYEOF'
 import sys
 from faster_whisper import WhisperModel
 
-mic_path, spk_path, model_name, mic_label, spk_label, out_path = sys.argv[1:7]
+mode, mic_path, spk_path, model_name, mic_label, spk_label, out_path = sys.argv[1:8]
 
-model = WhisperModel(model_name, device="cpu", compute_type="float32", cpu_threads=16)
+model = WhisperModel(model_name, device="cpu", compute_type="int8", cpu_threads=16)
 
 def events(path, label):
     segments, _ = model.transcribe(
@@ -89,24 +118,29 @@ def events(path, label):
             ev.append((seg.start, label, (seg.text or "").strip()))
     return ev
 
-ev = events(mic_path, mic_label) + events(spk_path, spk_label)
+ev = events(mic_path, mic_label)
+if mode == "online":
+    ev += events(spk_path, spk_label)
 ev.sort(key=lambda e: e[0])
 
 def fmt(t):
     s = int(t)
     return f"{s // 3600:02d}:{(s % 3600) // 60:02d}:{s % 60:02d}"
 
+GAP = 1.5  # seconds of silence that starts a new line
+
 lines = []
-cur = None  # (label, start, [words])
+cur = None  # [label, start, [words], last_start]
 for start, label, text in ev:
     if not text:
         continue
-    if cur is None or cur[0] != label:
+    if cur is not None and cur[0] == label and start - cur[3] < GAP:
+        cur[2].append(text)
+        cur[3] = start
+    else:
         if cur is not None:
             lines.append(f"[{fmt(cur[1])}] {cur[0]}: {' '.join(cur[2])}")
-        cur = (label, start, [text])
-    else:
-        cur[2].append(text)
+        cur = [label, start, [text], start]
 if cur is not None:
     lines.append(f"[{fmt(cur[1])}] {cur[0]}: {' '.join(cur[2])}")
 
@@ -114,9 +148,6 @@ with open(out_path, "w", encoding="utf-8") as f:
     f.write("\n".join(lines) + "\n")
 print(f"Transcript saved to: {out_path}")
 PYEOF
-    else
-        echo "No recording was captured."
-    fi
 
     # Open the transcript folder in the default file manager
     gio open "$SAVE_DIR" >/dev/null 2>&1 || true
@@ -127,13 +158,19 @@ PYEOF
 # Trap SIGINT (Ctrl+C)
 trap cleanup_and_transcribe SIGINT
 
-# Record PulseAudio/PipeWire: mic ('default') and system output ('@DEFAULT_MONITOR@'),
-# each into its own file so they stay separable for transcription.
-ffmpeg -nostdin -y -loglevel warning \
-  -f pulse -i default \
-  -f pulse -i @DEFAULT_MONITOR@ \
-  -map 0:a -c:a flac "$TEMP_MIC" \
-  -map 1:a -c:a flac "$TEMP_SPK"
+# Record PulseAudio/PipeWire. Online meetings capture mic and system output
+# separately so they stay separable; in-person meetings capture only the mic.
+if [ "$MODE" = "in-person" ]; then
+    ffmpeg -nostdin -y -loglevel warning \
+      -f pulse -i default \
+      -map 0:a -c:a flac "$TEMP_MIC"
+else
+    ffmpeg -nostdin -y -loglevel warning \
+      -f pulse -i default \
+      -f pulse -i @DEFAULT_MONITOR@ \
+      -map 0:a -c:a flac "$TEMP_MIC" \
+      -map 1:a -c:a flac "$TEMP_SPK"
+fi
 
 # Fallback if ffmpeg exits without SIGINT
 cleanup_and_transcribe
