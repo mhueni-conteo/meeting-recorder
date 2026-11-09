@@ -1,0 +1,11 @@
+# Private Operator partition
+/.operator/
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+
+# Editors and OS
+.idea/
+.DS_Store
