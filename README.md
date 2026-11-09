@@ -12,9 +12,16 @@ With agents becoming more and more part of our development pipeline, I needed a 
 - Records the callers from the `@DEFAULT_MONITOR@` monitor (system output).
 - On `Ctrl+C`, saves both tracks, transcribes them, merges them into one labeled file, and opens the transcript folder.
 
-## Requirements
+## Target platform
 
-- `ffmpeg` — `sudo dnf install ffmpeg-free`
+- Linux (Fedora tested) with PulseAudio or PipeWire — the script uses the `default` source and the `@DEFAULT_MONITOR@` monitor.
+- `bash` (`#!/usr/bin/env bash`).
+- GNOME desktop for the optional desktop integration (`gio open`, `gsettings`, `gnome-terminal`).
+- Transcription runs locally on CPU (`faster-whisper`, `float32`); no GPU or network required.
+
+## Prerequisites
+
+- `ffmpeg` — `sudo dnf install ffmpeg-free` (or `ffmpeg` from RPM Fusion)
 - `python3`
 - `faster-whisper` — `python3 -m pip install --user faster-whisper`
 
